@@ -334,10 +334,11 @@ class YOLOSegmentationModel: ObservableObject {
 
     /// 病害虫検出をアスパラガス/親茎と重なるもののみに絞る
     private func filterDiseaseByOverlap(_ detections: [SegmentationResult.Detection]) -> [SegmentationResult.Detection] {
-        // アスパラガス(1)と親茎(0)のバウンディングボックスを収集
+        // 親茎(0)、アスパラガス(1)、枝(2)のバウンディングボックスを収集
         let plantBoxes = detections.compactMap { d -> CGRect? in
             guard d.classIndex == AsparagusClass.mainStem.rawValue ||
-                  d.classIndex == AsparagusClass.asparagus.rawValue else { return nil }
+                  d.classIndex == AsparagusClass.asparagus.rawValue ||
+                  d.classIndex == AsparagusClass.branch.rawValue else { return nil }
             return d.boundingBox
         }
 
