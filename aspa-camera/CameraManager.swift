@@ -201,18 +201,64 @@ final class CameraManager: NSObject, ObservableObject {
 
     // MARK: - Photo Capture
 
+    /// 現在のフレームにマスクを合成してスナップショットとして保存
     func capturePhoto() {
-        let codec: AVVideoCodecType
-        if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
-            codec = .hevc
-        } else if let first = photoOutput.availablePhotoCodecTypes.first {
-            codec = first
-        } else {
-            codec = .jpeg
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            // 最新のフレームを取得してマスクを合成
+            Task { @MainActor in
+                guard let pixelBuffer = self.currentFrame else { return }
+                let image = self.createCompositeImage(from: pixelBuffer, mask: self._currentMaskSnapshot)
+                if let image = image {
+                    self.capturedImage = image
+                    self.saveToPhotoLibrary(image: image)
+                }
+            }
         }
-        let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
-        settings.flashMode = .auto
-        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+
+    /// ピクセルバッファとマスクからUIImageを生成
+    private func createCompositeImage(from pixelBuffer: CVPixelBuffer, mask: CGImage?) -> UIImage? {
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+
+        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        // BGRAソースからRGBAに変換しながら描画
+        guard let srcContext = CGContext(
+            data: baseAddress,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        ), let srcImage = srcContext.makeImage() else { return nil }
+
+        context.draw(srcImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // マスクを上に描画
+        if let mask = mask {
+            context.draw(mask, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+
+        guard let cgImage = context.makeImage() else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 
     // MARK: - Video Recording (AVAssetWriter)
@@ -302,22 +348,63 @@ final class CameraManager: NSObject, ObservableObject {
 
     // MARK: - Composite Frame (カメラフレーム + マスクオーバーレイ)
 
-    /// ピクセルバッファにマスク画像を合成した新しいピクセルバッファを生成
+    /// ピクセルバッファにマスク画像を合成（BGRA形式を維持）
     nonisolated private func compositeFrame(_ pixelBuffer: CVPixelBuffer, mask: CGImage?) -> CVPixelBuffer {
         guard let mask = mask else { return pixelBuffer }
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
+        // 一時的なRGBAコンテキストでカメラフレーム+マスクを合成し、
+        // 結果をBGRAピクセルバッファに書き戻す
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        // RGBA作業用コンテキスト
+        guard let rgbaContext = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return pixelBuffer }
+
+        // カメラフレーム(BGRA)をCGImageとして取得
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+
+        guard let srcContext = CGContext(
+            data: baseAddress,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+        ), let srcImage = srcContext.makeImage() else {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+            return pixelBuffer
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+
+        // RGBAコンテキストにカメラフレームを描画
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        rgbaContext.draw(srcImage, in: rect)
+
+        // マスクを上に描画
+        rgbaContext.draw(mask, in: rect)
+
+        // 結果をBGRAピクセルバッファに書き戻す
+        guard let compositeImage = rgbaContext.makeImage() else { return pixelBuffer }
+
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
 
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return pixelBuffer }
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: baseAddress,
+        guard let dstAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return pixelBuffer }
+        guard let dstContext = CGContext(
+            data: dstAddress,
             width: width,
             height: height,
             bitsPerComponent: 8,
@@ -326,8 +413,7 @@ final class CameraManager: NSObject, ObservableObject {
             bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
         ) else { return pixelBuffer }
 
-        // マスクをフレーム全体に描画
-        context.draw(mask, in: CGRect(x: 0, y: 0, width: width, height: height))
+        dstContext.draw(compositeImage, in: rect)
 
         return pixelBuffer
     }
@@ -343,20 +429,11 @@ final class CameraManager: NSObject, ObservableObject {
     }
 }
 
-// MARK: - Photo Capture Delegate
+// MARK: - Photo Capture Delegate (unused, kept for compatibility)
 
 extension CameraManager: AVCapturePhotoCaptureDelegate {
     nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        guard error == nil,
-              let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
-            return
-        }
-
-        Task { @MainActor in
-            self.capturedImage = image
-            self.saveToPhotoLibrary(image: image)
-        }
+        // Not used - capturePhoto() now creates composite images directly
     }
 }
 

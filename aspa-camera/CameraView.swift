@@ -13,7 +13,6 @@ struct CameraView: View {
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var yoloModel = YOLOSegmentationModel()
     @State private var showingSettings = false
-    @State private var showPerformanceDetails = false
     @State private var baseZoomFactor: CGFloat = 1.0
     
     var body: some View {
@@ -88,16 +87,6 @@ struct CameraView: View {
 
                         Spacer()
 
-                        // パフォーマンス表示
-                        if let result = yoloModel.currentResult {
-                            PerformanceMetricsView(
-                                inferenceTime: result.inferenceTime,
-                                fps: result.fps
-                            )
-                        }
-                        
-                        Spacer()
-                        
                         Button(action: { showingSettings.toggle() }) {
                             Image(systemName: "gear")
                                 .font(.title2)
@@ -110,25 +99,6 @@ struct CameraView: View {
                     .padding()
                     
                     Spacer()
-                    
-                    // 凡例とパフォーマンス詳細
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .top) {
-                            ClassLegendView()
-                            Spacer()
-                            DetailedPerformanceView(
-                                result: yoloModel.currentResult,
-                                averageFPS: yoloModel.averageFPS,
-                                averageInferenceTime: yoloModel.averageInferenceTime
-                            )
-                            .frame(maxWidth: 200)
-                        }
-                        
-                        // 統計情報
-                        DetectionStatsView(result: yoloModel.currentResult)
-                            .padding(.horizontal)
-                    }
-                    .padding(.horizontal)
                     
                     // ズーム倍率表示
                     if cameraManager.currentZoomFactor > 1.05 {

@@ -13,20 +13,7 @@ struct CaptureControlsView: View {
     @State private var showPhotoPreview = false
     
     var body: some View {
-        HStack(spacing: 40) {
-            // ギャラリーボタン
-            Button(action: {
-                // フォトライブラリを開く
-                openPhotoLibrary()
-            }) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.title2)
-                    .foregroundColor(.white)
-                    .frame(width: 50, height: 50)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            }
-            
+        HStack(spacing: 50) {
             // 写真撮影ボタン
             Button(action: {
                 cameraManager.capturePhoto()
@@ -71,6 +58,7 @@ struct CaptureControlsView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
         .padding(.horizontal)
         .sheet(isPresented: $showPhotoPreview) {
@@ -85,11 +73,6 @@ struct CaptureControlsView: View {
         }
     }
     
-    private func openPhotoLibrary() {
-        if let url = URL(string: "photos-redirect://") {
-            UIApplication.shared.open(url)
-        }
-    }
 }
 
 // 録画時間表示
