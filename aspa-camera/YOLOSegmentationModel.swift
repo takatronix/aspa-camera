@@ -110,13 +110,32 @@ class YOLOSegmentationModel: ObservableObject {
     @Published var averageFPS: Double = 0.0
     @Published var averageInferenceTime: TimeInterval = 0.0
     @Published var isModelLoaded = false
-    @Published var confidenceThreshold: Float = 0.25
+    @Published var confidenceThreshold: Float = 0.25 {
+        didSet { UserDefaults.standard.set(confidenceThreshold, forKey: "confidenceThreshold") }
+    }
     /// 病害虫をアスパラ/親茎と重なるもののみ表示
-    @Published var diseaseOverlapOnly: Bool = true
-    @Published var diseaseAlertSound: Bool = true
+    @Published var diseaseOverlapOnly: Bool = true {
+        didSet { UserDefaults.standard.set(diseaseOverlapOnly, forKey: "diseaseOverlapOnly") }
+    }
+    @Published var diseaseAlertSound: Bool = true {
+        didSet { UserDefaults.standard.set(diseaseAlertSound, forKey: "diseaseAlertSound") }
+    }
 
     private var model: VNCoreMLModel?
     private var wasDiseaseDetected = false
+
+    init() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "confidenceThreshold") != nil {
+            confidenceThreshold = defaults.float(forKey: "confidenceThreshold")
+        }
+        if defaults.object(forKey: "diseaseOverlapOnly") != nil {
+            diseaseOverlapOnly = defaults.bool(forKey: "diseaseOverlapOnly")
+        }
+        if defaults.object(forKey: "diseaseAlertSound") != nil {
+            diseaseAlertSound = defaults.bool(forKey: "diseaseAlertSound")
+        }
+    }
     private var frameCount = 0
     private var lastFrameTime = Date()
     private var fpsHistory: [Double] = []

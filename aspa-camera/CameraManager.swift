@@ -423,7 +423,7 @@ final class CameraManager: NSObject, ObservableObject {
             let bw = box.width * w
 
             let labelText = "\(classType.name) \(Int(detection.confidence * 100))%"
-            let fontSize: CGFloat = max(16, min(28, bw * 0.12))
+            let fontSize: CGFloat = max(32, min(56, bw * 0.24))
 
             let font = UIFont.boldSystemFont(ofSize: fontSize)
             let attributes: [NSAttributedString.Key: Any] = [
@@ -434,8 +434,9 @@ final class CameraManager: NSObject, ObservableObject {
             let padding: CGFloat = 6
             let labelW = textSize.width + padding * 2
             let labelH = textSize.height + padding * 2
+            let bh = box.height * h
             let labelX = bx + (bw - labelW) / 2
-            let labelY = by - labelH - 4
+            let labelY = by + (bh - labelH) / 2
 
             // ラベル背景
             let bgRect = CGRect(x: labelX, y: max(0, labelY), width: labelW, height: labelH)
