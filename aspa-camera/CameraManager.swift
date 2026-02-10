@@ -58,21 +58,6 @@ final class CameraManager: NSObject, ObservableObject {
         if alreadyAuthorized {
             isAuthorized = true
         }
-
-        NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil,
-            queue: nil
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.updateVideoOrientation()
-            }
-        }
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-    }
-
-    deinit {
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
     /// 権限がまだ未確定の場合にダイアログ表示し、カメラセットアップを行う
@@ -148,26 +133,6 @@ final class CameraManager: NSObject, ObservableObject {
 
                 session.commitConfiguration()
                 continuation.resume()
-            }
-        }
-    }
-
-    /// デバイスの向きに応じてビデオ出力の回転角度を更新
-    private func updateVideoOrientation() {
-        let angle: CGFloat
-        switch UIDevice.current.orientation {
-        case .portrait:            angle = 90
-        case .portraitUpsideDown:   angle = 270
-        case .landscapeLeft:        angle = 0
-        case .landscapeRight:       angle = 180
-        default: return
-        }
-
-        sessionQueue.async { [weak self] in
-            guard let self = self else { return }
-            if let connection = self.videoOutput.connection(with: .video),
-               connection.isVideoRotationAngleSupported(angle) {
-                connection.videoRotationAngle = angle
             }
         }
     }

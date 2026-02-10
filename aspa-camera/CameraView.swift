@@ -14,6 +14,7 @@ struct CameraView: View {
     @StateObject private var yoloModel = YOLOSegmentationModel()
     @State private var showingSettings = false
     @State private var baseZoomFactor: CGFloat = 1.0
+    @State private var deviceOrientation: UIDeviceOrientation = .portrait
     
     var body: some View {
         ZStack {
@@ -37,7 +38,8 @@ struct CameraView: View {
                             // セグメンテーションオーバーレイ
                             SegmentationOverlayView(
                                 result: yoloModel.currentResult,
-                                frameSize: CGSize(width: scaledW, height: scaledH)
+                                frameSize: CGSize(width: scaledW, height: scaledH),
+                                deviceOrientation: deviceOrientation
                             )
 
                             // マスクオーバーレイ
@@ -162,6 +164,15 @@ struct CameraView: View {
                 cameraManager._currentMaskSnapshot = yoloModel.currentResult?.maskImage
                 cameraManager._currentDetectionsSnapshot = yoloModel.currentResult?.detections ?? []
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            let orientation = UIDevice.current.orientation
+            if orientation == .portrait || orientation == .landscapeLeft || orientation == .landscapeRight || orientation == .portraitUpsideDown {
+                deviceOrientation = orientation
+            }
+        }
+        .onAppear {
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()

@@ -10,12 +10,13 @@ import SwiftUI
 struct SegmentationOverlayView: View {
     let result: SegmentationResult?
     let frameSize: CGSize
-    
+    var deviceOrientation: UIDeviceOrientation = .portrait
+
     var body: some View {
         ZStack {
             if let result = result {
                 ForEach(Array(result.detections.enumerated()), id: \.offset) { index, detection in
-                    DetectionBoxView(detection: detection, frameSize: frameSize)
+                    DetectionBoxView(detection: detection, frameSize: frameSize, deviceOrientation: deviceOrientation)
                 }
             }
         }
@@ -25,7 +26,21 @@ struct SegmentationOverlayView: View {
 struct DetectionBoxView: View {
     let detection: SegmentationResult.Detection
     let frameSize: CGSize
+    var deviceOrientation: UIDeviceOrientation = .portrait
     @State private var showDetailedInfo = false
+
+    private var labelRotation: Angle {
+        switch deviceOrientation {
+        case .landscapeLeft:
+            return .degrees(-90)
+        case .landscapeRight:
+            return .degrees(90)
+        case .portraitUpsideDown:
+            return .degrees(180)
+        default:
+            return .degrees(0)
+        }
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -58,6 +73,8 @@ struct DetectionBoxView: View {
                     .foregroundColor(.white)
                     .cornerRadius(6)
                     .shadow(radius: 2)
+                    .rotationEffect(labelRotation)
+                    .animation(.easeInOut(duration: 0.3), value: deviceOrientation.rawValue)
                     .position(x: rect.minX + rect.width / 2, y: rect.minY - 20)
 
                     // 詳細情報（検出エリア内）
@@ -93,6 +110,8 @@ struct DetectionBoxView: View {
                         .cornerRadius(8)
                         .shadow(radius: 4)
                         .frame(maxWidth: max(50, rect.width - 16))
+                        .rotationEffect(labelRotation)
+                        .animation(.easeInOut(duration: 0.3), value: deviceOrientation.rawValue)
                         .position(x: rect.midX, y: rect.midY)
                     }
                 }
