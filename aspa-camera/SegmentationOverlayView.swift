@@ -32,9 +32,9 @@ struct DetectionBoxView: View {
     private var labelRotation: Angle {
         switch deviceOrientation {
         case .landscapeLeft:
-            return .degrees(-90)
-        case .landscapeRight:
             return .degrees(90)
+        case .landscapeRight:
+            return .degrees(-90)
         case .portraitUpsideDown:
             return .degrees(180)
         default:
