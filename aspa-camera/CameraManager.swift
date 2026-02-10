@@ -18,6 +18,7 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var error: Error?
     @Published var isRecording = false
     @Published var capturedImage: UIImage?
+    @Published var videoResolution: CGSize = CGSize(width: 1080, height: 1920)
 
     nonisolated private let captureSession = AVCaptureSession()
     nonisolated private let videoOutput = AVCaptureVideoDataOutput()
@@ -341,8 +342,15 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             return
         }
 
+        // 解像度を更新（初回のみ）
+        let w = CVPixelBufferGetWidth(pixelBuffer)
+        let h = CVPixelBufferGetHeight(pixelBuffer)
+
         // MainActorにフレームを送信
         Task { @MainActor in
+            if Int(self.videoResolution.width) != w || Int(self.videoResolution.height) != h {
+                self.videoResolution = CGSize(width: w, height: h)
+            }
             self.currentFrame = pixelBuffer
         }
 

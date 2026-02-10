@@ -20,20 +20,34 @@ struct CameraView: View {
             if cameraManager.isAuthorized {
                 // カメラプレビュー
                 GeometryReader { geometry in
+                    let viewSize = geometry.size
+                    let videoSize = cameraManager.videoResolution
+                    // AspectFillと同じスケール計算
+                    let scaleX = viewSize.width / videoSize.width
+                    let scaleY = viewSize.height / videoSize.height
+                    let fillScale = max(scaleX, scaleY)
+                    let scaledW = videoSize.width * fillScale
+                    let scaledH = videoSize.height * fillScale
+
                     ZStack {
                         CameraPreviewView(previewLayer: cameraManager.previewLayer)
-                        
-                        // セグメンテーションオーバーレイ
-                        SegmentationOverlayView(
-                            result: yoloModel.currentResult,
-                            frameSize: geometry.size
-                        )
-                        
-                        // マスクオーバーレイ
-                        if let maskImage = yoloModel.currentResult?.maskImage {
-                            MaskOverlayView(maskImage: maskImage)
+
+                        // オーバーレイをAspectFillに合わせたサイズで中央配置
+                        ZStack {
+                            // セグメンテーションオーバーレイ
+                            SegmentationOverlayView(
+                                result: yoloModel.currentResult,
+                                frameSize: CGSize(width: scaledW, height: scaledH)
+                            )
+
+                            // マスクオーバーレイ
+                            if let maskImage = yoloModel.currentResult?.maskImage {
+                                MaskOverlayView(maskImage: maskImage)
+                            }
                         }
+                        .frame(width: scaledW, height: scaledH)
                     }
+                    .clipped()
                 }
                 .edgesIgnoringSafeArea(.all)
                 
