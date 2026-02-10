@@ -19,11 +19,14 @@ final class CameraManager: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var capturedImage: UIImage?
     @Published var videoResolution: CGSize = CGSize(width: 1080, height: 1920)
+    @Published var currentZoomFactor: CGFloat = 1.0
+    @Published var maxZoomFactor: CGFloat = 10.0
 
     nonisolated private let captureSession = AVCaptureSession()
     nonisolated private let videoOutput = AVCaptureVideoDataOutput()
     nonisolated private let photoOutput = AVCapturePhotoOutput()
     nonisolated private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    nonisolated(unsafe) private var videoDevice: AVCaptureDevice?
 
     // AVAssetWriter ベースの録画
     nonisolated(unsafe) private var assetWriter: AVAssetWriter?
@@ -114,6 +117,12 @@ final class CameraManager: NSObject, ObservableObject {
                     session.addInput(videoInput)
                 }
 
+                self.videoDevice = videoDevice
+                let maxZoom = min(videoDevice.activeFormat.videoMaxZoomFactor, 10.0)
+                Task { @MainActor in
+                    self.maxZoomFactor = maxZoom
+                }
+
                 vOutput.videoSettings = [
                     kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
                 ]
@@ -158,6 +167,23 @@ final class CameraManager: NSObject, ObservableObject {
                connection.isVideoRotationAngleSupported(angle) {
                 connection.videoRotationAngle = angle
             }
+        }
+    }
+
+    // MARK: - Zoom
+
+    func setZoom(_ factor: CGFloat) {
+        let clamped = max(1.0, min(factor, maxZoomFactor))
+        sessionQueue.async { [weak self] in
+            guard let self = self, let device = self.videoDevice else { return }
+            do {
+                try device.lockForConfiguration()
+                device.videoZoomFactor = clamped
+                device.unlockForConfiguration()
+                Task { @MainActor in
+                    self.currentZoomFactor = clamped
+                }
+            } catch {}
         }
     }
 

@@ -14,6 +14,7 @@ struct CameraView: View {
     @StateObject private var yoloModel = YOLOSegmentationModel()
     @State private var showingSettings = false
     @State private var showPerformanceDetails = false
+    @State private var baseZoomFactor: CGFloat = 1.0
     
     var body: some View {
         ZStack {
@@ -50,6 +51,16 @@ struct CameraView: View {
                     .clipped()
                 }
                 .edgesIgnoringSafeArea(.all)
+                .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            let newZoom = baseZoomFactor * value.magnification
+                            cameraManager.setZoom(newZoom)
+                        }
+                        .onEnded { value in
+                            baseZoomFactor = cameraManager.currentZoomFactor
+                        }
+                )
                 
                 // モデル読み込み中の表示
                 if !yoloModel.isModelLoaded {
@@ -119,6 +130,18 @@ struct CameraView: View {
                     }
                     .padding(.horizontal)
                     
+                    // ズーム倍率表示
+                    if cameraManager.currentZoomFactor > 1.05 {
+                        Text(String(format: "%.1fx", cameraManager.currentZoomFactor))
+                            .font(.system(.body, design: .monospaced))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(16)
+                    }
+
                     // 撮影コントロール
                     CaptureControlsView(cameraManager: cameraManager)
                         .padding(.bottom, 20)
