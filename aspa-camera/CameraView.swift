@@ -97,9 +97,9 @@ struct CameraView: View {
                         }
                     }
                     .padding()
-                    
+
                     Spacer()
-                    
+
                     // ズーム倍率表示
                     if cameraManager.currentZoomFactor > 1.05 {
                         Text(String(format: "%.1fx", cameraManager.currentZoomFactor))

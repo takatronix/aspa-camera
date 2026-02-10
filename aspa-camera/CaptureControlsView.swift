@@ -13,8 +13,8 @@ struct CaptureControlsView: View {
     @State private var showPhotoPreview = false
     
     var body: some View {
-        HStack(spacing: 50) {
-            // 写真撮影ボタン
+        ZStack {
+            // 写真撮影ボタン（中央）
             Button(action: {
                 cameraManager.capturePhoto()
             }) {
@@ -22,45 +22,48 @@ struct CaptureControlsView: View {
                     Circle()
                         .fill(Color.white)
                         .frame(width: 70, height: 70)
-                    
+
                     Circle()
                         .strokeBorder(Color.white, lineWidth: 3)
                         .frame(width: 80, height: 80)
                 }
             }
-            
-            // 動画撮影ボタン
-            Button(action: {
-                if cameraManager.isRecording {
-                    cameraManager.stopRecording()
-                } else {
-                    cameraManager.startRecording()
-                }
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(cameraManager.isRecording ? Color.red : Color.white)
-                        .frame(width: 70, height: 70)
-                    
+
+            // 動画撮影ボタン（右寄り）
+            HStack {
+                Spacer()
+
+                Button(action: {
                     if cameraManager.isRecording {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.white)
-                            .frame(width: 30, height: 30)
+                        cameraManager.stopRecording()
                     } else {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 60, height: 60)
+                        cameraManager.startRecording()
                     }
-                    
-                    Circle()
-                        .strokeBorder(Color.white, lineWidth: 3)
-                        .frame(width: 80, height: 80)
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(cameraManager.isRecording ? Color.red : Color.white)
+                            .frame(width: 60, height: 60)
+
+                        if cameraManager.isRecording {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white)
+                                .frame(width: 24, height: 24)
+                        } else {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 50, height: 50)
+                        }
+
+                        Circle()
+                            .strokeBorder(Color.white, lineWidth: 3)
+                            .frame(width: 70, height: 70)
+                    }
                 }
+                .padding(.trailing, 40)
             }
         }
-        .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
-        .padding(.horizontal)
         .sheet(isPresented: $showPhotoPreview) {
             if let image = cameraManager.capturedImage {
                 PhotoPreviewView(image: image)
