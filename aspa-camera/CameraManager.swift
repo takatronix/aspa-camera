@@ -408,11 +408,18 @@ final class CameraManager: NSObject, ObservableObject {
         let h = CGFloat(height)
         let viewSize = CGSize(width: w, height: h)
 
+        // ラベルサイズを推定（実際のフォントサイズに基づく）
+        // フォントサイズは max(32, min(56, bw * 0.24)) で、日本語テキスト+パディングの幅を推定
+        let avgBoxW = detections.map { DetectionLabelLayout.convertBox($0.boundingBox, to: viewSize).width }.reduce(0, +) / CGFloat(detections.count)
+        let estFontSize = max(32, min(56, avgBoxW * 0.24))
+        let estLabelW = estFontSize * 6 + 12  // 日本語3文字+数字3文字+パディング
+        let estLabelH = estFontSize * 1.4 + 12
+
         // 共通レイアウトで位置を計算（重なり防止）
         let positions = DetectionLabelLayout.resolvePositions(
             detections: detections,
             viewSize: viewSize,
-            estimatedLabelSize: CGSize(width: w * 0.15, height: h * 0.03)
+            estimatedLabelSize: CGSize(width: estLabelW, height: estLabelH)
         )
 
         // 回転角度
