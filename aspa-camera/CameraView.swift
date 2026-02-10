@@ -158,8 +158,9 @@ struct CameraView: View {
         .onChange(of: cameraManager.currentFrame) { _, newFrame in
             if let frame = newFrame, !showingSettings {
                 yoloModel.processFrame(frame)
-                // 録画用にマスク画像をCameraManagerに渡す
+                // 録画・撮影用にマスク画像と検出結果をCameraManagerに渡す
                 cameraManager._currentMaskSnapshot = yoloModel.currentResult?.maskImage
+                cameraManager._currentDetectionsSnapshot = yoloModel.currentResult?.detections ?? []
             }
         }
         .sheet(isPresented: $showingSettings) {

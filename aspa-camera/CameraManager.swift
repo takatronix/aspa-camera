@@ -36,6 +36,8 @@ final class CameraManager: NSObject, ObservableObject {
     nonisolated(unsafe) private var _isRecordingFlag = false
     /// 録画時にsessionQueueから読まれるマスクのスナップショット
     nonisolated(unsafe) var _currentMaskSnapshot: CGImage?
+    /// 録画・撮影時に使う検出結果のスナップショット
+    nonisolated(unsafe) var _currentDetectionsSnapshot: [SegmentationResult.Detection] = []
 
     // プレビューレイヤーを保持
     nonisolated(unsafe) private(set) lazy var previewLayer: AVCaptureVideoPreviewLayer = {
@@ -257,6 +259,9 @@ final class CameraManager: NSObject, ObservableObject {
             context.draw(mask, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
 
+        // 検出ラベルを描画
+        drawDetectionLabels(context: context, detections: _currentDetectionsSnapshot, width: width, height: height)
+
         guard let cgImage = context.makeImage() else { return nil }
         return UIImage(cgImage: cgImage)
     }
@@ -348,9 +353,9 @@ final class CameraManager: NSObject, ObservableObject {
 
     // MARK: - Composite Frame (カメラフレーム + マスクオーバーレイ)
 
-    /// ピクセルバッファにマスク画像を合成（BGRA形式を維持）
-    nonisolated private func compositeFrame(_ pixelBuffer: CVPixelBuffer, mask: CGImage?) -> CVPixelBuffer {
-        guard let mask = mask else { return pixelBuffer }
+    /// ピクセルバッファにマスク画像と検出ラベルを合成（BGRA形式を維持）
+    nonisolated private func compositeFrame(_ pixelBuffer: CVPixelBuffer, mask: CGImage?, detections: [SegmentationResult.Detection]) -> CVPixelBuffer {
+        guard mask != nil || !detections.isEmpty else { return pixelBuffer }
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
@@ -394,7 +399,12 @@ final class CameraManager: NSObject, ObservableObject {
         rgbaContext.draw(srcImage, in: rect)
 
         // マスクを上に描画
-        rgbaContext.draw(mask, in: rect)
+        if let mask = mask {
+            rgbaContext.draw(mask, in: rect)
+        }
+
+        // 検出ラベルを描画
+        drawDetectionLabels(context: rgbaContext, detections: detections, width: width, height: height)
 
         // 結果をBGRAピクセルバッファに書き戻す
         guard let compositeImage = rgbaContext.makeImage() else { return pixelBuffer }
@@ -416,6 +426,63 @@ final class CameraManager: NSObject, ObservableObject {
         dstContext.draw(compositeImage, in: rect)
 
         return pixelBuffer
+    }
+
+    // MARK: - Detection Label Drawing
+
+    /// CGContextに検出ラベル（クラス名+信頼度）を描画
+    nonisolated private func drawDetectionLabels(context: CGContext, detections: [SegmentationResult.Detection], width: Int, height: Int) {
+        guard !detections.isEmpty else { return }
+
+        let w = CGFloat(width)
+        let h = CGFloat(height)
+
+        // CGContextはY軸が上向きなので反転して描画
+        context.saveGState()
+        context.translateBy(x: 0, y: h)
+        context.scaleBy(x: 1, y: -1)
+
+        for detection in detections {
+            guard let classType = AsparagusClass(rawValue: detection.classIndex) else { continue }
+
+            // 正規化座標からピクセル座標に変換
+            let box = detection.boundingBox
+            let bx = box.minX * w
+            let by = box.minY * h
+            let bw = box.width * w
+            let bh = box.height * h
+
+            let labelText = "\(classType.name) \(Int(detection.confidence * 100))%"
+            let fontSize: CGFloat = max(16, min(28, bw * 0.12))
+
+            let font = UIFont.boldSystemFont(ofSize: fontSize)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .foregroundColor: UIColor.white
+            ]
+            let textSize = (labelText as NSString).size(withAttributes: attributes)
+            let padding: CGFloat = 6
+            let labelW = textSize.width + padding * 2
+            let labelH = textSize.height + padding * 2
+            let labelX = bx + (bw - labelW) / 2
+            let labelY = by - labelH - 4
+
+            // ラベル背景
+            let bgRect = CGRect(x: labelX, y: max(0, labelY), width: labelW, height: labelH)
+            let bgColor = classType.color.withAlphaComponent(0.85)
+            context.setFillColor(bgColor.cgColor)
+            let bgPath = UIBezierPath(roundedRect: bgRect, cornerRadius: 6)
+            context.addPath(bgPath.cgPath)
+            context.fillPath()
+
+            // テキスト描画
+            let textX = bgRect.minX + padding
+            let textY = bgRect.minY + padding
+            let textRect = CGRect(x: textX, y: textY, width: textSize.width, height: textSize.height)
+            (labelText as NSString).draw(in: textRect, withAttributes: attributes)
+        }
+
+        context.restoreGState()
     }
 
     // MARK: - Save to Photo Library
@@ -474,9 +541,10 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         guard input.isReadyForMoreMediaData else { return }
 
-        // マスクを合成してフレームを書き込み
+        // マスク・ラベルを合成してフレームを書き込み
         let maskSnapshot = _currentMaskSnapshot
-        let composited = compositeFrame(pixelBuffer, mask: maskSnapshot)
+        let detectionsSnapshot = _currentDetectionsSnapshot
+        let composited = compositeFrame(pixelBuffer, mask: maskSnapshot, detections: detectionsSnapshot)
         adaptor.append(composited, withPresentationTime: timestamp)
     }
 }
