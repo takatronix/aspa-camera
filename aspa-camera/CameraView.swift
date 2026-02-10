@@ -137,15 +137,13 @@ struct CameraView: View {
             }
         }
         .task {
-            // カメラセットアップとモデル読み込みを並行実行
-            async let cameraSetup: Void = {
-                await cameraManager.requestAuthorizationAndSetup()
-                if cameraManager.isAuthorized {
-                    cameraManager.startSession()
-                }
-            }()
-            async let modelLoad: Void = yoloModel.loadModel()
-            _ = await (cameraSetup, modelLoad)
+            await cameraManager.requestAuthorizationAndSetup()
+            if cameraManager.isAuthorized {
+                cameraManager.startSession()
+            }
+        }
+        .task {
+            await yoloModel.loadModel()
         }
         .onDisappear {
             cameraManager.stopSession()

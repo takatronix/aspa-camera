@@ -162,6 +162,9 @@ class YOLOSegmentationModel: ObservableObject {
         if let visionModel = result {
             self.model = visionModel
             self.isModelLoaded = true
+            print("✅ モデル準備完了")
+        } else {
+            print("⚠️ モデル読み込み結果: nil")
         }
     }
     
