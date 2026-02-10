@@ -11,6 +11,7 @@ import CoreML
 @preconcurrency import Vision
 import CoreImage
 import Combine
+import AudioToolbox
 
 #if canImport(UIKit)
 import UIKit
@@ -112,8 +113,10 @@ class YOLOSegmentationModel: ObservableObject {
     @Published var confidenceThreshold: Float = 0.25
     /// 病害虫をアスパラ/親茎と重なるもののみ表示
     @Published var diseaseOverlapOnly: Bool = true
+    @Published var diseaseAlertSound: Bool = true
 
     private var model: VNCoreMLModel?
+    private var wasDiseaseDetected = false
     private var frameCount = 0
     private var lastFrameTime = Date()
     private var fpsHistory: [Double] = []
@@ -254,8 +257,11 @@ class YOLOSegmentationModel: ObservableObject {
             inferenceTime: inferenceTime,
             fps: fps
         )
+
+        // 病気検出の状態変化をチェック
+        checkDiseaseAlert(detections: detections)
     }
-    
+
     private func parseYOLOOutput(_ multiArray: MLMultiArray) -> [SegmentationResult.Detection] {
         var detections: [SegmentationResult.Detection] = []
         
@@ -360,6 +366,20 @@ class YOLOSegmentationModel: ObservableObject {
                 return overlapRatio >= overlapThreshold
             }
         }
+    }
+
+    /// 病気の検出状態変化をチェックし、新規検出時に音を鳴らす
+    private func checkDiseaseAlert(detections: [SegmentationResult.Detection]) {
+        let hasDiseaseNow = detections.contains { detection in
+            guard let cls = AsparagusClass(rawValue: detection.classIndex) else { return false }
+            return cls.isDiseased
+        }
+
+        if diseaseAlertSound && hasDiseaseNow && !wasDiseaseDetected {
+            AudioServicesPlaySystemSound(1007) // 警告音
+        }
+
+        wasDiseaseDetected = hasDiseaseNow
     }
 
     /// Non-Maximum Suppression: IoUが閾値を超える重複検出を除去

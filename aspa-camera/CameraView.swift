@@ -223,6 +223,7 @@ struct SettingsView: View {
                     }
 
                     Toggle("病害虫はアスパラ上のみ検出", isOn: $yoloModel.diseaseOverlapOnly)
+                    Toggle("病気検出時にアラート音", isOn: $yoloModel.diseaseAlertSound)
                 }
 
                 Section("検出クラス") {
