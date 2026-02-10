@@ -75,7 +75,7 @@ struct DetectionBoxView: View {
                     .shadow(radius: 2)
                     .rotationEffect(labelRotation)
                     .animation(.easeInOut(duration: 0.3), value: deviceOrientation.rawValue)
-                    .position(x: rect.minX + rect.width / 2, y: rect.minY - 20)
+                    .position(x: rect.midX, y: rect.midY)
 
                     // 詳細情報（検出エリア内）
                     if showDetailedInfo {

@@ -285,19 +285,22 @@ final class CameraManager: NSObject, ObservableObject {
 
     func stopRecording() {
         guard _isRecordingFlag else { return }
+        _isRecordingFlag = false
+
+        Task { @MainActor in
+            self.isRecording = false
+        }
 
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
-            self._isRecordingFlag = false
 
             self.assetWriterVideoInput?.markAsFinished()
             self.assetWriter?.finishWriting { [weak self] in
                 guard let self = self else { return }
                 let url = self.currentVideoURL
 
-                Task { @MainActor in
-                    self.isRecording = false
-                    if let url = url {
+                if let url = url {
+                    Task { @MainActor in
                         self.saveVideoToPhotoLibrary(url)
                     }
                 }
@@ -407,6 +410,9 @@ final class CameraManager: NSObject, ObservableObject {
         context.translateBy(x: 0, y: h)
         context.scaleBy(x: 1, y: -1)
 
+        // NSString.drawにはUIKitグラフィックスコンテキストが必要
+        UIGraphicsPushContext(context)
+
         for detection in detections {
             guard let classType = AsparagusClass(rawValue: detection.classIndex) else { continue }
 
@@ -415,7 +421,6 @@ final class CameraManager: NSObject, ObservableObject {
             let bx = box.minX * w
             let by = box.minY * h
             let bw = box.width * w
-            let bh = box.height * h
 
             let labelText = "\(classType.name) \(Int(detection.confidence * 100))%"
             let fontSize: CGFloat = max(16, min(28, bw * 0.12))
@@ -447,6 +452,7 @@ final class CameraManager: NSObject, ObservableObject {
             (labelText as NSString).draw(in: textRect, withAttributes: attributes)
         }
 
+        UIGraphicsPopContext()
         context.restoreGState()
     }
 

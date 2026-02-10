@@ -34,20 +34,22 @@ struct CameraView: View {
                         CameraPreviewView(previewLayer: cameraManager.previewLayer)
 
                         // オーバーレイをAspectFillに合わせたサイズで中央配置
-                        ZStack {
-                            // セグメンテーションオーバーレイ
-                            SegmentationOverlayView(
-                                result: yoloModel.currentResult,
-                                frameSize: CGSize(width: scaledW, height: scaledH),
-                                deviceOrientation: deviceOrientation
-                            )
+                        if yoloModel.isModelLoaded {
+                            ZStack {
+                                // セグメンテーションオーバーレイ
+                                SegmentationOverlayView(
+                                    result: yoloModel.currentResult,
+                                    frameSize: CGSize(width: scaledW, height: scaledH),
+                                    deviceOrientation: deviceOrientation
+                                )
 
-                            // マスクオーバーレイ
-                            if let maskImage = yoloModel.currentResult?.maskImage {
-                                MaskOverlayView(maskImage: maskImage)
+                                // マスクオーバーレイ
+                                if let maskImage = yoloModel.currentResult?.maskImage {
+                                    MaskOverlayView(maskImage: maskImage)
+                                }
                             }
+                            .frame(width: scaledW, height: scaledH)
                         }
-                        .frame(width: scaledW, height: scaledH)
                     }
                     .clipped()
                 }
