@@ -171,6 +171,7 @@ struct CameraView: View {
             let orientation = UIDevice.current.orientation
             if orientation == .portrait || orientation == .landscapeLeft || orientation == .landscapeRight || orientation == .portraitUpsideDown {
                 deviceOrientation = orientation
+                cameraManager._currentOrientationSnapshot = orientation
             }
         }
         .onAppear {

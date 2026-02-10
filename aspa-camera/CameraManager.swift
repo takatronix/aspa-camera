@@ -38,6 +38,8 @@ final class CameraManager: NSObject, ObservableObject {
     nonisolated(unsafe) var _currentMaskSnapshot: CGImage?
     /// 録画・撮影時に使う検出結果のスナップショット
     nonisolated(unsafe) var _currentDetectionsSnapshot: [SegmentationResult.Detection] = []
+    /// 録画・撮影時のデバイス向きスナップショット
+    nonisolated(unsafe) var _currentOrientationSnapshot: UIDeviceOrientation = .portrait
 
     // プレビューレイヤーを保持
     nonisolated(unsafe) private(set) lazy var previewLayer: AVCaptureVideoPreviewLayer = {
@@ -225,7 +227,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
 
         // 検出ラベルを描画
-        drawDetectionLabels(context: context, detections: _currentDetectionsSnapshot, width: width, height: height)
+        drawDetectionLabels(context: context, detections: _currentDetectionsSnapshot, width: width, height: height, orientation: _currentOrientationSnapshot)
 
         guard let cgImage = context.makeImage() else { return nil }
         return UIImage(cgImage: cgImage)
@@ -372,7 +374,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
 
         // 検出ラベルを描画
-        drawDetectionLabels(context: rgbaContext, detections: detections, width: width, height: height)
+        drawDetectionLabels(context: rgbaContext, detections: detections, width: width, height: height, orientation: _currentOrientationSnapshot)
 
         // 結果をBGRAピクセルバッファに書き戻す
         guard let compositeImage = rgbaContext.makeImage() else { return pixelBuffer }
@@ -399,11 +401,29 @@ final class CameraManager: NSObject, ObservableObject {
     // MARK: - Detection Label Drawing
 
     /// CGContextに検出ラベル（クラス名+信頼度）を描画
-    nonisolated private func drawDetectionLabels(context: CGContext, detections: [SegmentationResult.Detection], width: Int, height: Int) {
+    nonisolated private func drawDetectionLabels(context: CGContext, detections: [SegmentationResult.Detection], width: Int, height: Int, orientation: UIDeviceOrientation = .portrait) {
         guard !detections.isEmpty else { return }
 
         let w = CGFloat(width)
         let h = CGFloat(height)
+        let viewSize = CGSize(width: w, height: h)
+
+        // 共通レイアウトで位置を計算（重なり防止）
+        let positions = DetectionLabelLayout.resolvePositions(
+            detections: detections,
+            viewSize: viewSize,
+            estimatedLabelSize: CGSize(width: w * 0.15, height: h * 0.03)
+        )
+
+        // 回転角度
+        let rotationAngle: CGFloat = {
+            switch orientation {
+            case .landscapeLeft: return .pi / 2
+            case .landscapeRight: return -.pi / 2
+            case .portraitUpsideDown: return .pi
+            default: return 0
+            }
+        }()
 
         // CGContextはY軸が上向きなので反転して描画
         context.saveGState()
@@ -413,16 +433,27 @@ final class CameraManager: NSObject, ObservableObject {
         // NSString.drawにはUIKitグラフィックスコンテキストが必要
         UIGraphicsPushContext(context)
 
-        for detection in detections {
+        for (index, detection) in detections.enumerated() {
             guard let classType = AsparagusClass(rawValue: detection.classIndex) else { continue }
+            guard index < positions.count else { continue }
 
-            // 正規化座標からピクセル座標に変換
-            let box = detection.boundingBox
-            let bx = box.minX * w
-            let by = box.minY * h
-            let bw = box.width * w
+            let pos = positions[index]
+            let boxRect = pos.boxRect
 
+            // 引き出し線（ラベルが移動された場合のみ）
+            let boxCenterX = boxRect.midX
+            let boxCenterY = boxRect.midY
+            if abs(pos.center.x - boxCenterX) > 2 || abs(pos.center.y - boxCenterY) > 2 {
+                context.setStrokeColor(UIColor.white.withAlphaComponent(0.8).cgColor)
+                context.setLineWidth(2)
+                context.move(to: CGPoint(x: boxCenterX, y: boxCenterY))
+                context.addLine(to: pos.center)
+                context.strokePath()
+            }
+
+            // ラベルテキスト
             let labelText = "\(classType.name) \(Int(detection.confidence * 100))%"
+            let bw = boxRect.width
             let fontSize: CGFloat = max(32, min(56, bw * 0.24))
 
             let font = UIFont.boldSystemFont(ofSize: fontSize)
@@ -434,23 +465,33 @@ final class CameraManager: NSObject, ObservableObject {
             let padding: CGFloat = 6
             let labelW = textSize.width + padding * 2
             let labelH = textSize.height + padding * 2
-            let bh = box.height * h
-            let labelX = bx + (bw - labelW) / 2
-            let labelY = by + (bh - labelH) / 2
 
-            // ラベル背景
-            let bgRect = CGRect(x: labelX, y: max(0, labelY), width: labelW, height: labelH)
+            // 回転対応: ラベル中心で回転
+            let cx = pos.center.x
+            let cy = pos.center.y
+
+            context.saveGState()
+            context.translateBy(x: cx, y: cy)
+            context.rotate(by: -rotationAngle)
+
+            // ラベル背景（中心基準で描画）
+            let bgRect = CGRect(x: -labelW / 2, y: -labelH / 2, width: labelW, height: labelH)
             let bgColor = classType.color.withAlphaComponent(0.85)
             context.setFillColor(bgColor.cgColor)
             let bgPath = UIBezierPath(roundedRect: bgRect, cornerRadius: 6)
             context.addPath(bgPath.cgPath)
             context.fillPath()
 
-            // テキスト描画
-            let textX = bgRect.minX + padding
-            let textY = bgRect.minY + padding
-            let textRect = CGRect(x: textX, y: textY, width: textSize.width, height: textSize.height)
+            // テキスト描画（中心基準）
+            let textRect = CGRect(
+                x: -textSize.width / 2,
+                y: -textSize.height / 2,
+                width: textSize.width,
+                height: textSize.height
+            )
             (labelText as NSString).draw(in: textRect, withAttributes: attributes)
+
+            context.restoreGState()
         }
 
         UIGraphicsPopContext()

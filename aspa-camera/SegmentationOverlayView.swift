@@ -13,10 +13,22 @@ struct SegmentationOverlayView: View {
     var deviceOrientation: UIDeviceOrientation = .portrait
 
     var body: some View {
-        ZStack {
-            if let result = result {
-                ForEach(Array(result.detections.enumerated()), id: \.offset) { index, detection in
-                    DetectionBoxView(detection: detection, frameSize: frameSize, deviceOrientation: deviceOrientation)
+        GeometryReader { geometry in
+            ZStack {
+                if let result = result {
+                    let positions = DetectionLabelLayout.resolvePositions(
+                        detections: result.detections,
+                        viewSize: geometry.size
+                    )
+                    ForEach(Array(result.detections.enumerated()), id: \.offset) { index, detection in
+                        DetectionBoxView(
+                            detection: detection,
+                            frameSize: frameSize,
+                            deviceOrientation: deviceOrientation,
+                            labelCenter: positions[index].center,
+                            boxRect: positions[index].boxRect
+                        )
+                    }
                 }
             }
         }
@@ -27,6 +39,8 @@ struct DetectionBoxView: View {
     let detection: SegmentationResult.Detection
     let frameSize: CGSize
     var deviceOrientation: UIDeviceOrientation = .portrait
+    var labelCenter: CGPoint? = nil
+    var boxRect: CGRect? = nil
     @State private var showDetailedInfo = false
 
     private var labelRotation: Angle {
@@ -44,10 +58,20 @@ struct DetectionBoxView: View {
     
     var body: some View {
         GeometryReader { geometry in
-            let rect = convertBoundingBox(detection.boundingBox, to: geometry.size)
+            let rect = boxRect ?? convertBoundingBox(detection.boundingBox, to: geometry.size)
             let classType = AsparagusClass(rawValue: detection.classIndex)
-            
+            let center = labelCenter ?? CGPoint(x: rect.midX, y: rect.midY)
+
             ZStack(alignment: .topLeading) {
+                // 引き出し線（ラベルが移動された場合のみ）
+                if abs(center.x - rect.midX) > 2 || abs(center.y - rect.midY) > 2 {
+                    Path { path in
+                        path.move(to: CGPoint(x: rect.midX, y: rect.midY))
+                        path.addLine(to: center)
+                    }
+                    .stroke(Color.white.opacity(0.8), lineWidth: 1.5)
+                }
+
                 // タップ領域（透明）
                 Color.clear
                     .frame(width: rect.width, height: rect.height)
@@ -57,7 +81,7 @@ struct DetectionBoxView: View {
                         showDetailedInfo.toggle()
                     }
 
-                // ラベル（上部）
+                // ラベル
                 if let classType = classType {
                     VStack(spacing: 2) {
                         Text(classType.name)
@@ -75,7 +99,7 @@ struct DetectionBoxView: View {
                     .shadow(radius: 2)
                     .rotationEffect(labelRotation)
                     .animation(.easeInOut(duration: 0.3), value: deviceOrientation.rawValue)
-                    .position(x: rect.midX, y: rect.midY)
+                    .position(x: center.x, y: center.y)
 
                     // 詳細情報（検出エリア内）
                     if showDetailedInfo {
@@ -112,7 +136,7 @@ struct DetectionBoxView: View {
                         .frame(maxWidth: max(50, rect.width - 16))
                         .rotationEffect(labelRotation)
                         .animation(.easeInOut(duration: 0.3), value: deviceOrientation.rawValue)
-                        .position(x: rect.midX, y: rect.midY)
+                        .position(x: center.x, y: center.y)
                     }
                 }
             }
