@@ -43,7 +43,16 @@ final class CameraManager: NSObject, ObservableObject {
     private var currentVideoURL: URL?
 
     override init() {
+        // 同期的に権限チェック（UIブロックなし）
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        let alreadyAuthorized = (status == .authorized)
+
         super.init()
+
+        if alreadyAuthorized {
+            isAuthorized = true
+        }
+
         NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: nil,
@@ -60,14 +69,17 @@ final class CameraManager: NSObject, ObservableObject {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
-    func checkAuthorization() async {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            isAuthorized = true
-        case .notDetermined:
-            isAuthorized = await AVCaptureDevice.requestAccess(for: .video)
-        default:
-            isAuthorized = false
+    /// 権限がまだ未確定の場合にダイアログ表示し、カメラセットアップを行う
+    func requestAuthorizationAndSetup() async {
+        if !isAuthorized {
+            switch AVCaptureDevice.authorizationStatus(for: .video) {
+            case .authorized:
+                isAuthorized = true
+            case .notDetermined:
+                isAuthorized = await AVCaptureDevice.requestAccess(for: .video)
+            default:
+                isAuthorized = false
+            }
         }
 
         if isAuthorized {

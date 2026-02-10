@@ -109,22 +109,18 @@ class YOLOSegmentationModel: ObservableObject {
     @Published var averageFPS: Double = 0.0
     @Published var averageInferenceTime: TimeInterval = 0.0
     @Published var isModelLoaded = false
-    
+    @Published var confidenceThreshold: Float = 0.25
+
     private var model: VNCoreMLModel?
     private var frameCount = 0
     private var lastFrameTime = Date()
     private var fpsHistory: [Double] = []
     private var inferenceTimeHistory: [TimeInterval] = []
-    private let maxHistorySize = 30 // 30フレーム分の平均を取る
+    private let maxHistorySize = 30
     private let processingQueue = DispatchQueue(label: "yolo.processing.queue", qos: .userInitiated)
-    
-    init() {
-        Task { [weak self] in
-            await self?.loadModel()
-        }
-    }
 
-    private func loadModel() async {
+    /// CameraViewの.taskから呼ぶ
+    func loadModel() async {
         let modelNames = [
             "aspara-v3-b1",
             "best",
@@ -288,7 +284,7 @@ class YOLOSegmentationModel: ObservableObject {
                 }
                 
                 // 信頼度フィルター
-                guard maxScore > 0.25 else { continue }
+                guard maxScore > confidenceThreshold else { continue }
                 
                 // 座標を正規化 (0-640 -> 0-1)
                 let x = (cx - w / 2) / 640.0

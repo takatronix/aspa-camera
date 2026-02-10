@@ -137,10 +137,15 @@ struct CameraView: View {
             }
         }
         .task {
-            await cameraManager.checkAuthorization()
-            if cameraManager.isAuthorized {
-                cameraManager.startSession()
-            }
+            // カメラセットアップとモデル読み込みを並行実行
+            async let cameraSetup: Void = {
+                await cameraManager.requestAuthorizationAndSetup()
+                if cameraManager.isAuthorized {
+                    cameraManager.startSession()
+                }
+            }()
+            async let modelLoad: Void = yoloModel.loadModel()
+            _ = await (cameraSetup, modelLoad)
         }
         .onDisappear {
             cameraManager.stopSession()
@@ -200,6 +205,18 @@ struct SettingsView: View {
                     }
                 }
                 
+                Section("検出設定") {
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("信頼度しきい値")
+                            Spacer()
+                            Text("\(Int(yoloModel.confidenceThreshold * 100))%")
+                                .foregroundColor(.secondary)
+                        }
+                        Slider(value: $yoloModel.confidenceThreshold, in: 0.1...0.9, step: 0.05)
+                    }
+                }
+
                 Section("検出クラス") {
                     ForEach(AsparagusClass.allCases, id: \.rawValue) { classType in
                         HStack {
