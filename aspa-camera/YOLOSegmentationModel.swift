@@ -110,6 +110,8 @@ class YOLOSegmentationModel: ObservableObject {
     @Published var averageInferenceTime: TimeInterval = 0.0
     @Published var isModelLoaded = false
     @Published var confidenceThreshold: Float = 0.25
+    /// 病害虫をアスパラ/親茎と重なるもののみ表示
+    @Published var diseaseOverlapOnly: Bool = true
 
     private var model: VNCoreMLModel?
     private var frameCount = 0
@@ -323,7 +325,29 @@ class YOLOSegmentationModel: ObservableObject {
             }
         }
         
-        return applyNMS(detections, iouThreshold: 0.5)
+        var result = applyNMS(detections, iouThreshold: 0.5)
+        if diseaseOverlapOnly {
+            result = filterDiseaseByOverlap(result)
+        }
+        return result
+    }
+
+    /// 病害虫検出をアスパラガス/親茎と重なるもののみに絞る
+    private func filterDiseaseByOverlap(_ detections: [SegmentationResult.Detection]) -> [SegmentationResult.Detection] {
+        // アスパラガス(1)と親茎(0)のバウンディングボックスを収集
+        let plantBoxes = detections.compactMap { d -> CGRect? in
+            guard d.classIndex == AsparagusClass.mainStem.rawValue ||
+                  d.classIndex == AsparagusClass.asparagus.rawValue else { return nil }
+            return d.boundingBox
+        }
+
+        return detections.filter { d in
+            guard let cls = AsparagusClass(rawValue: d.classIndex), cls.isDiseased else {
+                return true // 非病害虫はそのまま通す
+            }
+            // いずれかの植物体と重なっているか
+            return plantBoxes.contains { $0.intersects(d.boundingBox) }
+        }
     }
 
     /// Non-Maximum Suppression: IoUが閾値を超える重複検出を除去

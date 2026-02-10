@@ -227,6 +227,8 @@ struct SettingsView: View {
                         }
                         Slider(value: $yoloModel.confidenceThreshold, in: 0.1...0.9, step: 0.05)
                     }
+
+                    Toggle("病害虫はアスパラ上のみ検出", isOn: $yoloModel.diseaseOverlapOnly)
                 }
 
                 Section("検出クラス") {
