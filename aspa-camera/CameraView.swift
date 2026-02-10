@@ -163,7 +163,7 @@ struct CameraView: View {
             cameraManager.stopSession()
         }
         .onChange(of: cameraManager.currentFrame) { _, newFrame in
-            if let frame = newFrame {
+            if let frame = newFrame, !showingSettings {
                 yoloModel.processFrame(frame)
                 // 録画用にマスク画像をCameraManagerに渡す
                 cameraManager._currentMaskSnapshot = yoloModel.currentResult?.maskImage

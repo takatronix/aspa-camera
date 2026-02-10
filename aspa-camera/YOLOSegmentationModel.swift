@@ -332,8 +332,11 @@ class YOLOSegmentationModel: ObservableObject {
         return result
     }
 
-    /// 病害虫検出をアスパラガス/親茎と重なるもののみに絞る
+    /// 病害虫検出をアスパラガス/親茎/枝と重なるもののみに絞る
+    /// 病害虫bboxの面積のうち、植物体bboxとの重なり割合が閾値以上のものだけ残す
     private func filterDiseaseByOverlap(_ detections: [SegmentationResult.Detection]) -> [SegmentationResult.Detection] {
+        let overlapThreshold: CGFloat = 0.2 // 病害虫面積の20%以上が植物体と重なっていること
+
         // 親茎(0)、アスパラガス(1)、枝(2)のバウンディングボックスを収集
         let plantBoxes = detections.compactMap { d -> CGRect? in
             guard d.classIndex == AsparagusClass.mainStem.rawValue ||
@@ -346,8 +349,16 @@ class YOLOSegmentationModel: ObservableObject {
             guard let cls = AsparagusClass(rawValue: d.classIndex), cls.isDiseased else {
                 return true // 非病害虫はそのまま通す
             }
-            // いずれかの植物体と重なっているか
-            return plantBoxes.contains { $0.intersects(d.boundingBox) }
+            let diseaseArea = d.boundingBox.width * d.boundingBox.height
+            guard diseaseArea > 0 else { return false }
+
+            // いずれかの植物体との重なり割合が閾値以上か
+            return plantBoxes.contains { plantBox in
+                let intersection = plantBox.intersection(d.boundingBox)
+                guard !intersection.isNull else { return false }
+                let overlapRatio = (intersection.width * intersection.height) / diseaseArea
+                return overlapRatio >= overlapThreshold
+            }
         }
     }
 
